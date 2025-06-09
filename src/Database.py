@@ -48,17 +48,94 @@ class Database():
         """
         self.df.to_csv(self._path)
 
-    def _get_card_for_calendar(self,card_serie:pd.Series)->Tuple:
+    def _get_card_for_calendar(self, card_serie: pd.Series) -> Tuple:
         """Returns args to create an event
 
         Args:
             card_serie (pd.Series): series that corresponds to a Notion card
+
+        Returns:
+            Tuple: (title, start_date, end_date, start_time, end_time, url_str, description_str)
         """
-        title = card_serie.title
-        start,end = str(card_serie.start_date),str(card_serie.end_date)
-        start_date,start_time = start.split()
-        end_date,end_time = end.split()
-        return (title,start_date,end_date,start_time,end_time)
+        from datetime import datetime, timedelta
+        import pandas as pd
+        
+        # Get title with empty string as fallback
+        title = getattr(card_serie, 'title', 'Untitled Event')
+        
+        # Get current time for fallback values
+        now = datetime.now()
+        default_date = now.strftime('%Y-%m-%d')
+        default_time = '00:00:00'
+        
+        # Handle start date and time
+        try:
+            if pd.isna(getattr(card_serie, 'start_date', None)):
+                start_date = default_date
+                start_time = default_time
+            else:
+                start_str = str(card_serie.start_date)
+                if ' ' in start_str and start_str != 'NaT' and 'NaT' not in start_str:
+                    start_date, start_time = start_str.split(' ')[:2]
+                    # Validate time format
+                    try:
+                        datetime.strptime(start_time, '%H:%M:%S')
+                    except ValueError:
+                        start_time = default_time
+                else:
+                    start_date = start_str if start_str != 'NaT' else default_date
+                    start_time = default_time
+                
+                # Validate date format
+                try:
+                    datetime.strptime(start_date, '%Y-%m-%d')
+                except ValueError:
+                    start_date = default_date
+        except Exception as e:
+            logging.warning(f"Error parsing start date for '{title}': {e}. Using default values.")
+            start_date = default_date
+            start_time = default_time
+        
+        # Handle end date and time
+        try:
+            if pd.isna(getattr(card_serie, 'end_date', None)):
+                # If no end date, use start date + 1 hour
+                end_date = start_date
+                try:
+                    start_dt = datetime.strptime(f"{start_date} {start_time}", '%Y-%m-%d %H:%M:%S')
+                    end_dt = start_dt + timedelta(hours=1)
+                    end_date = end_dt.strftime('%Y-%m-%d')
+                    end_time = end_dt.strftime('%H:%M:%S')
+                except:
+                    end_time = '23:59:59'
+            else:
+                end_str = str(card_serie.end_date)
+                if ' ' in end_str and end_str != 'NaT' and 'NaT' not in end_str:
+                    end_date, end_time = end_str.split(' ')[:2]
+                    # Validate time format
+                    try:
+                        datetime.strptime(end_time, '%H:%M:%S')
+                    except ValueError:
+                        end_time = '23:59:59'
+                else:
+                    end_date = end_str if end_str != 'NaT' else start_date
+                    end_time = '23:59:59'  # Default to end of day if no time provided
+                
+                # Validate date format
+                try:
+                    datetime.strptime(end_date, '%Y-%m-%d')
+                except ValueError:
+                    end_date = start_date
+        except Exception as e:
+            logging.warning(f"Error parsing end date for '{title}': {e}. Using start date + 1 hour.")
+            end_date = start_date
+            end_time = '23:59:59'
+        
+        # Get URL and description with empty string as fallback
+        url_str = str(getattr(card_serie, 'url', '')).strip()
+        description_str = str(getattr(card_serie, 'description', '')).strip()
+        
+        return (title, start_date, end_date, start_time, end_time, url_str, description_str)
 
     def get_live(self)->pd.DataFrame:
         """Get a database corresponding to the actual state in Notion app
@@ -188,34 +265,84 @@ class Database():
             logging.info(f"{id} has been added on Notion")
         return index
 
-    def add_events(self,list_id:List,current=None)->None:
+    def add_events(self, list_id: List, current=None) -> None:
         """Adds newly added events on the database and create an event on Calendar
 
         Args:
             list_id (List): list of index
             current (pd.DataFrame, optional): live database. Defaults to None.
         """
+        if not list_id:  # If no events to add, return early
+            return
+            
         if current is None:
             current = self.get_live()
+            
         to_add = current.loc[list_id]
-        for id,s in to_add.iterrows():
+        success_count = 0
+        error_count = 0
+        
+        for id, s in to_add.iterrows():
             try:
-                event_id = self.calendar_client.add_event(*self._get_card_for_calendar(s))
-                s['event_id'] = event_id
-                self.df = self.df.append(s,verify_integrity=True)
-                logging.info(f"{id} has been added to the database")
-                self.save()
+                # Skip if event already exists with same title and dates
+                existing_event = self.df[
+                    (self.df.title == s.title) & 
+                    (self.df.start_date == s.start_date) & 
+                    (self.df.end_date == s.end_date)
+                ]
+                
+                if not existing_event.empty:
+                    logging.info(f"Skipping duplicate: Event '{s.title}' on {s.start_date} already exists in database.")
+                    continue
+                    
+                if id in self.df.index:
+                    logging.info(f"Skipping: Event ID {id} already exists in database.")
+                    continue
+                
+                # Get calendar event details with proper error handling
+                try:
+                    event_details = self._get_card_for_calendar(s)
+                except Exception as e:
+                    logging.error(f"Error processing event '{getattr(s, 'title', 'Untitled')}' (ID: {id}): {str(e)}")
+                    error_count += 1
+                    continue
+                
+                # Add event to calendar
+                try:
+                    event_id = self.calendar_client.add_event(*event_details)
+                    if not event_id:
+                        raise ValueError("Failed to get event ID from calendar")
+                        
+                    # Update the series with the event ID
+                    s['event_id'] = event_id
+                    
+                    # Add to our dataframe
+                    self.df.loc[id] = s
+                    success_count += 1
+                    logging.info(f"Added event '{s.title}' (ID: {id}) to calendar with event ID: {event_id}")
+                    
+                    # Save after each successful addition
+                    self.save()
+                    
+                except Exception as e:
+                    logging.error(f"Failed to add event '{getattr(s, 'title', 'Untitled')}' (ID: {id}) to calendar: {str(e)}")
+                    error_count += 1
+                    
             except Exception as e:
-                logging.info(f"{e}")
-                raise Exception(e)
+                logging.error(f"Unexpected error processing event ID {id}: {str(e)}")
+                error_count += 1
+        
+        # Log summary
+        if success_count > 0 or error_count > 0:
+            logging.info(f"Add events summary: {success_count} added, {error_count} failed, {len(list_id) - success_count - error_count} skipped (duplicates or already exists)")
 
     def run(self):
         live = self.get_live()
 
-        # Remove outdated events
-        if self.df.shape[0] > 0:
-            id_outdated = self.get_outdated()
-            self.remove_events(id_outdated)
+        # # Remove outdated events
+        # if self.df.shape[0] > 0:
+        #     id_outdated = self.get_outdated()
+        #     self.remove_events(id_outdated)
         
         # Add new events
         id_news = self.get_new(current=live)

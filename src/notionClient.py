@@ -16,19 +16,39 @@ class Card:
         - datetime of last edit
         - start datetime
         - end datetime : if not provided set to start datetime
+        - Description
+        - Url
 
         Args:
             page (Dict): dict from API call result
         """
-        self._id = page['id']
-        self.title = page.get('properties').get('Name').get('title')[0].get('plain_text')
-        self.last_edited_time = self._convert_datetime(page.get('last_edited_time'))
-        self.start_date = self._convert_datetime(page.get('properties').get('date').get('date').get('start'))
-        end_date = self._convert_datetime(page.get('properties').get('date').get('date').get('end'))
-        if end_date is None:
-            self.end_date = self.start_date
-        else:
-            self.end_date = end_date
+        # Initialize with default values
+        self._id = None
+        self.title = None
+        self.last_edited_time = None
+        self.start_date = None
+        self.end_date = None
+        self.url = ""
+        self.description = ""
+        
+        try:
+            self._id = page['id']
+            title = page.get('properties').get('Name').get('title')
+            if (len(title)>0): 
+                self.title = title[0].get('plain_text')
+                self.last_edited_time = self._convert_datetime(page.get('last_edited_time'))
+                self.start_date = self._convert_datetime(page.get('properties').get('Date').get('date').get('start'))
+                end_date = self._convert_datetime(page.get('properties').get('Date').get('date').get('end'))
+                if end_date is None:
+                    self.end_date = self.start_date
+                else:
+                    self.end_date = end_date
+                self.url = page.get('properties').get('URL').get('url') or ""
+                self.description = page.get('properties').get('Description').get('rich_text')[0].get('plain_text') if  len(page.get('properties').get('Description').get('rich_text')) > 0 else ""
+        except Exception as e:
+            import pdb; pdb.set_trace()
+            raise Exception(e)
+
 
     def to_dict(self) -> Dict:
         """Returns a representation of the card object as a Dict
@@ -41,12 +61,14 @@ class Card:
             'last_edit': self.last_edited_time,
             'start_date': self.start_date,
             'end_date': self.end_date,
-            'title': self.title
+            'title': self.title,
+            'url': self.url,
+            'description': self.description
         }
         return _dict
 
     def __repr__(self) -> str:
-        return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}"
+        return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}"
 
     def _convert_datetime(self, notion_datetime: str) -> datetime:
         """Helpher function to normalize datetimes
@@ -99,14 +121,7 @@ class NotionClient:
         _list_page = []
         start_cursor = None
         _url = f"{self._base_url}databases/{database_id}/query"
-        payload = {
-            "filter": {
-                "property": "date",
-                "date": {
-                    "on_or_after": datetime.now().strftime("%Y-%m-%d")
-                }
-            },
-        }
+        payload = {}
         while has_more:
             if start_cursor:
                 payload['start_cursor'] = start_cursor

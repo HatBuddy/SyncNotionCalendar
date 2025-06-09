@@ -1,63 +1,72 @@
+import os
 import configparser
+from pathlib import Path
+import logging
 import sys
 
 
-class InitConf:
-
-    def __init__(self):
+class Configuration:
+    def __init__(self) -> None:
+        self.databases_id = []
         self.notion_token = None
         self.calendar_name = None
-        self.databases_id = []
-        self.database_name = []
+        self.config = configparser.ConfigParser()
+        self.config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.ini')
+        
+    def load_config(self):
+        """Load configuration from config.ini file"""
+        if not os.path.exists(self.config_path):
+            raise FileNotFoundError(
+                "No config.ini file found. Please create one with your configuration."
+            )
+        
+        self.config.read(self.config_path)
+        
+        # Load required values
+        if 'GLOBAL' in self.config:
+            self.notion_token = self.config['GLOBAL'].get('NOTION_TOKEN')
+            self.calendar_name = self.config['GLOBAL'].get('APPLE_CALENDAR')
+        
+        # Load database IDs
+        if 'DATABASES' in self.config:
+            self.databases_id = [db_id for db_id in self.config['DATABASES'].values() if db_id.strip()]
+        
+        # Validate required values
+        if not self.notion_token:
+            raise ValueError("NOTION_TOKEN is not set in config.ini")
+        if not self.calendar_name:
+            raise ValueError("APPLE_CALENDAR is not set in config.ini")
+        if not self.databases_id:
+            raise ValueError("No valid database IDs found in config.ini")
 
-    def ask_notion_token(self):
-        token = input("Paste your Notion integration token : ")
-        assert token[:7] == "secret_", "token must begin with 'secret_'"
-        assert len(token) == 50, "token size must be 50 characters"
-        self.notion_token = token
-
-    def ask_calendar_name(self):
-        name = input("Enter the calendar name you want to sync : ")
-        self.calendar_name = name
-
-    def ask_databases(self):
-        nb_calendar = int(input("How many databases would you like to sync ? "))
-        for i in range(nb_calendar):
-            db_name = input("Enter your database name : ")
-            db_name = db_name.replace(" ", "_")
-            db_token = input("Paste your database ID : ")
-            assert len(db_token) == 32, "database ID must have a 32-length"
-            self.database_name.append(db_name)
-            self.databases_id.append(db_token)
-
-    def write_config_file(self, path):
-        config = configparser.ConfigParser()
-        config['GLOBAL'] = {
+    def create_conf_file(self, path):
+        """Create config.ini from environment variables"""
+        self.config["GLOBAL"] = {
             "NOTION_TOKEN": self.notion_token,
             "APPLE_CALENDAR": self.calendar_name
         }
-        config['DATABASES'] = {
-            name: id_ for (name, id_) in zip(self.database_name, self.databases_id)
-        }
-        with open(path, 'w') as configfile:
-            config.write(configfile)
+        self.config["DATABASES"] = {}
+        for i, db_id in enumerate(self.databases_id):
+            if db_id:  # Only add non-empty database IDs
+                self.config["DATABASES"][f"DB_{i+1}"] = db_id
+                
+        with open(path, "w") as f:
+            self.config.write(f)
 
     def run(self, path):
-        self.ask_notion_token()
-        self.ask_calendar_name()
-        self.ask_databases()
-        self.write_config_file(path)
+        """Load configuration from config.ini"""
+        try:
+            self.load_config()
+            print("\nConfiguration loaded from config.ini")
+        except Exception as e:
+            print(f"\nError: {str(e)}")
+            print("\nPlease make sure you have a valid config.ini file with the required settings.")
+            exit(1)
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     path = sys.argv[1]
-    try:
-        InitConf().run(path)
-    except Exception as e:
-        print(e)
-        sys.exit()
-
-
+    c = Configuration()
+    c.run(path)
 
 
 
