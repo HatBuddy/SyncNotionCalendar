@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Tuple
 import pandas as pd
 import os
@@ -57,9 +57,6 @@ class Database():
         Returns:
             Tuple: (title, start_date, end_date, start_time, end_time, url_str, description_str)
         """
-        from datetime import datetime, timedelta
-        import pandas as pd
-        
         # Get title with empty string as fallback
         title = getattr(card_serie, 'title', 'Untitled Event')
         
@@ -119,6 +116,14 @@ class Database():
                         end_time = '23:59:59'
                 else:
                     end_date = end_str if end_str != 'NaT' else start_date
+                    # For all-day events, if end time is 00:00:00, subtract one day from the end date
+                    if ' ' in end_str and end_str.endswith('00:00:00'):
+                        try:
+                            end_date_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                            end_date_dt = end_date_dt - timedelta(days=1)
+                            end_date = end_date_dt.strftime('%Y-%m-%d')
+                        except:
+                            pass
                     end_time = '23:59:59'  # Default to end of day if no time provided
                 
                 # Validate date format
