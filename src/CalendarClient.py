@@ -1,5 +1,6 @@
 import applescript
 import logging
+from datetime import datetime, timedelta
 
 
 class CalendarClient:
@@ -46,32 +47,25 @@ class CalendarClient:
         Returns:
             str : Id of the newly created event
         """
-        from datetime import datetime
         # Parse and format start date
         start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M:%S")
         start_applescript = start_dt.strftime('%A, %B %d, %Y at %I:%M:%S %p')
-        set_start_date = f'set theStartDate to date "{start_applescript}"\n'
-        cmd = set_start_date
+        cmd = f'set theStartDate to date "{start_applescript}"\n'
 
         # Adjust end date for inclusivity
         is_all_day = (start_time == "00:00:00" and end_time == "00:00:00")
         if is_all_day:
             # For all-day events, add one day to the end date to make it inclusive
-            from datetime import timedelta
             end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-            end_time_str = "00:00:00"
-            end_dt = datetime.combine(end_dt.date(), datetime.strptime(end_time_str, "%H:%M:%S").time())
         else:
             # For timed events, if end_time is '00:00:00', set it to '23:59:59' to include the full end date
             if end_time == "00:00:00":
                 end_time = "23:59:59"
             end_dt = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M:%S")
         end_applescript = end_dt.strftime('%A, %B %d, %Y at %I:%M:%S %p')
-        set_end_date = f'set theEndDate to date "{end_applescript}"\n'
-        cmd += set_end_date
+        cmd += f'set theEndDate to date "{end_applescript}"\n'
 
         # Build AppleScript for event creation, only including url/description if present
-        is_all_day = (start_time == "00:00:00" and end_time == "00:00:00")
         cmd += f"""
         tell application "Calendar"
             tell calendar "{self.applescript_escape(self.name)}"

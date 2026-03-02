@@ -14,15 +14,10 @@ if __name__ == "__main__":
 
     log_files = glob(os.path.join(cwd, 'logs', '*.log'))
 
-
-    def file_today(file, date):
-        file_day = int(file.split('T')[0].split('-')[-1])
-        return file_day != date.day
-
-
-    to_remove = list(filter(lambda f: file_today(f, start_datetime), log_files))
-    for f in to_remove:
-        os.remove(os.path.join(cwd, 'logs', f))
+    for f in log_files:
+        file_day = int(os.path.basename(f).split('T')[0].split('-')[-1])
+        if file_day != start_datetime.day:
+            os.remove(f)
 
     conf = ConfigParser()
     conf.read('config.ini')

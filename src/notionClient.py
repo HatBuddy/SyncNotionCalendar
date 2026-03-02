@@ -46,8 +46,8 @@ class Card:
                 self.url = page.get('properties').get('URL').get('url') or ""
                 self.description = page.get('properties').get('Description').get('rich_text')[0].get('plain_text') if  len(page.get('properties').get('Description').get('rich_text')) > 0 else ""
         except Exception as e:
-            import pdb; pdb.set_trace()
-            raise Exception(e)
+            logging.error(f"Failed to parse Notion card {self._id}: {e}")
+            raise
 
 
     def to_dict(self) -> Dict:
@@ -71,7 +71,7 @@ class Card:
         return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}"
 
     def _convert_datetime(self, notion_datetime: str) -> datetime:
-        """Helpher function to normalize datetimes
+        """Helper function to normalize datetimes
 
         Args:
             notion_datetime (str): datetime
@@ -126,12 +126,16 @@ class NotionClient:
             if start_cursor:
                 payload['start_cursor'] = start_cursor
             q = requests.post(_url, headers=self._headers, json=payload)
-            try:
-                _list_page += q.json()['results']
-            except:
-                logging.error('while fetching cards on Notion : {q.text}')
+            if not q.ok:
+                logging.error(f'while fetching cards on Notion : {q.text}')
                 raise Exception(q.text)
-            has_more = q.json()['has_more']
-            start_cursor = q.json()['next_cursor']
+            try:
+                data = q.json()
+                _list_page += data['results']
+            except Exception as e:
+                logging.error(f'while fetching cards on Notion : {q.text}')
+                raise Exception(q.text) from e
+            has_more = data['has_more']
+            start_cursor = data['next_cursor']
         _list_card = [Card(page) for page in _list_page]
         return _list_card

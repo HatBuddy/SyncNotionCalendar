@@ -7,7 +7,7 @@ from .CalendarClient import CalendarClient
 import logging
 
 class Database():
-    """This class stores event already added to Calendar. It performs also updates : add new cards, modify cards, delete cards.
+    """Stores events already synced to Calendar and performs add/modify/delete syncs.
     """
     def __init__(self,id:str,notion_token:str,apple_calendar:str,folder=os.getcwd()) -> None:
         """Constructor
@@ -103,7 +103,7 @@ class Database():
                     end_dt = start_dt + timedelta(hours=1)
                     end_date = end_dt.strftime('%Y-%m-%d')
                     end_time = end_dt.strftime('%H:%M:%S')
-                except:
+                except Exception:
                     end_time = '23:59:59'
             else:
                 end_str = str(card_serie.end_date)
@@ -122,7 +122,7 @@ class Database():
                             end_date_dt = datetime.strptime(end_date, '%Y-%m-%d')
                             end_date_dt = end_date_dt - timedelta(days=1)
                             end_date = end_date_dt.strftime('%Y-%m-%d')
-                        except:
+                        except Exception:
                             pass
                     end_time = '23:59:59'  # Default to end of day if no time provided
                 
@@ -150,7 +150,7 @@ class Database():
             pd.DataFrame: live database
         """
         current_cards = self.notion_client.get_live_cards(self.id)
-        current_as_dict = list(map(lambda card : card.to_dict(),current_cards))
+        current_as_dict = [card.to_dict() for card in current_cards]
         if len(current_as_dict) > 0:
             return pd.DataFrame(current_as_dict).set_index('id')
         else:
@@ -246,8 +246,8 @@ class Database():
             new_event_id = self.calendar_client.add_event(*self._get_card_for_calendar(modified_event))
             modified_event['event_id'] = new_event_id
             self.df.loc[id] = modified_event
-            logging.info(f"{id} has been updated on the databese")
-            self.save()
+            logging.info(f"{id} has been updated on the database")
+        self.save()
 
     
 
@@ -344,11 +344,6 @@ class Database():
     def run(self):
         live = self.get_live()
 
-        # # Remove outdated events
-        # if self.df.shape[0] > 0:
-        #     id_outdated = self.get_outdated()
-        #     self.remove_events(id_outdated)
-        
         # Add new events
         id_news = self.get_new(current=live)
         self.add_events(id_news,current=live)
