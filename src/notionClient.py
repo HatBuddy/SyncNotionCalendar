@@ -39,16 +39,19 @@ class Card:
         try:
             self._id = page['id']
             properties = page.get('properties') or {}
-            title = properties.get('Name').get('title')
+            title = (properties.get('Name') or {}).get('title') or []
             if (len(title)>0):
                 self.title = title[0].get('plain_text')
                 self.last_edited_time = self._convert_datetime(page.get('last_edited_time'))
-                start_raw = properties.get('Date').get('date').get('start')
+                # A row whose Date is still empty has `date: null`; that is a row
+                # waiting to be filled in, not a reason to fail the run.
+                date_prop = (properties.get('Date') or {}).get('date') or {}
+                start_raw = date_prop.get('start')
                 # Notion sends a bare date for all-day entries and a full
                 # timestamp for timed ones; that is the only reliable signal.
                 self.all_day = 'T' not in (start_raw or 'T')
                 self.start_date = self._convert_datetime(start_raw)
-                end_raw = properties.get('Date').get('date').get('end')
+                end_raw = date_prop.get('end')
                 end_date = self._convert_datetime(end_raw)
                 # Kept verbatim so the state file stays readable: these show the
                 # time as entered in Notion, with the zone it belongs to.
@@ -106,6 +109,18 @@ class Card:
             str: normalized text
         """
         return ' '.join(text.split())
+
+    @property
+    def is_syncable(self) -> bool:
+        """Whether this card can become a Calendar event.
+
+        A card with no start date cannot be placed on a calendar, so it is
+        skipped rather than guessed at.
+
+        Returns:
+            bool: True when the card has a start date
+        """
+        return self.start_date is not None
 
     def to_dict(self) -> Dict:
         """Returns a representation of the card object as a Dict
@@ -206,5 +221,16 @@ class NotionClient:
                 raise Exception(q.text) from e
             has_more = data['has_more']
             start_cursor = data['next_cursor']
-        _list_card = [Card(page) for page in _list_page]
+        _list_card = []
+        for page in _list_page:
+            try:
+                card = Card(page)
+            except Exception as e:
+                # One unparseable page must not cost every other event
+                logging.error(f"skipping Notion page {page.get('id')}: {e}")
+                continue
+            if not card.is_syncable:
+                logging.warning(f"skipping Notion page {card._id} ('{card.title}'): no date set")
+                continue
+            _list_card.append(card)
         return _list_card

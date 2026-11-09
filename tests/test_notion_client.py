@@ -173,6 +173,19 @@ class CardTests(unittest.TestCase):
         self.assertEqual(Card(page).url, "")
 
 
+    def test_card_with_no_date_set_does_not_raise(self):
+        page = notion_page()
+        page["properties"]["Date"] = {"date": None}
+
+        card = Card(page)
+
+        self.assertFalse(card.is_syncable)
+        self.assertIsNone(card.start_date)
+
+    def test_card_with_a_date_is_syncable(self):
+        self.assertTrue(Card(notion_page()).is_syncable)
+
+
 class NotionClientTests(unittest.TestCase):
     def test_get_live_cards_fetches_all_pages(self):
         responses = [
@@ -208,6 +221,36 @@ class NotionClientTests(unittest.TestCase):
             "https://api.notion.com/v1/databases/database-id/query",
         )
         self.assertEqual(calls[0]["headers"]["Authorization"], "Bearer secret-token")
+
+    def test_get_live_cards_skips_dateless_cards_instead_of_failing(self):
+        dateless = notion_page(page_id="page-2", title="Trip being planned")
+        dateless["properties"]["Date"] = {"date": None}
+        response = FakeResponse(
+            {
+                "results": [notion_page(page_id="page-1"), dateless],
+                "has_more": False,
+                "next_cursor": None,
+            }
+        )
+
+        with patch("src.notionClient.requests.post", return_value=response):
+            cards = NotionClient("secret-token").get_live_cards("database-id")
+
+        self.assertEqual([card._id for card in cards], ["page-1"])
+
+    def test_get_live_cards_survives_an_unparseable_page(self):
+        response = FakeResponse(
+            {
+                "results": [{"id": "broken"}, notion_page(page_id="page-1")],
+                "has_more": False,
+                "next_cursor": None,
+            }
+        )
+
+        with patch("src.notionClient.requests.post", return_value=response):
+            cards = NotionClient("secret-token").get_live_cards("database-id")
+
+        self.assertEqual([card._id for card in cards], ["page-1"])
 
     def test_get_live_cards_raises_on_api_error(self):
         response = FakeResponse({}, ok=False, text="Notion said no")
