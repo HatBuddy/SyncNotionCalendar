@@ -98,6 +98,50 @@ class CalendarClientTests(unittest.TestCase):
         self.assertIn('set url of newEvent to "https://example.com"', command)
         self.assertIn('"Note with \\"quotes\\""', command)
 
+    def test_add_event_honours_explicit_all_day_flag(self):
+        client = CalendarClient("Work")
+
+        with patch(
+            "src.CalendarClient.applescript.run",
+            return_value=AppleScriptResult(out="calendar-event-1"),
+        ) as run:
+            client.add_event(
+                "Red eye",
+                "2025-01-15",
+                "2025-01-15",
+                "00:00:00",
+                "00:00:00",
+                "",
+                "",
+                all_day=False,
+            )
+
+        command = run.call_args.args[0]
+        self.assertNotIn("allday event:true", command)
+        self.assertIn("January 15, 2025 at 11:59:59 PM", command)
+
+    def test_add_event_all_day_flag_extends_end_date_by_a_day(self):
+        client = CalendarClient("Work")
+
+        with patch(
+            "src.CalendarClient.applescript.run",
+            return_value=AppleScriptResult(out="calendar-event-1"),
+        ) as run:
+            client.add_event(
+                "Conference",
+                "2025-01-15",
+                "2025-01-16",
+                "00:00:00",
+                "00:00:00",
+                "",
+                "",
+                all_day=True,
+            )
+
+        command = run.call_args.args[0]
+        self.assertIn("allday event:true", command)
+        self.assertIn("January 17, 2025 at 12:00:00 AM", command)
+
     def test_add_event_raises_when_applescript_reports_error(self):
         client = CalendarClient("Work")
 

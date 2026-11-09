@@ -44,6 +44,7 @@ class Database():
                 'url',
                 'description',
                 'flight_code',
+                'all_day',
                 'event_id'
             ]).set_index('id')
         return df
@@ -149,7 +150,7 @@ class Database():
             card_serie (pd.Series): series that corresponds to a Notion card
 
         Returns:
-            Tuple: (title, start_date, end_date, start_time, end_time, url_str, description_str)
+            Tuple: (title, start_date, end_date, start_time, end_time, url_str, description_str, all_day)
         """
         # Get title with empty string as fallback
         title = getattr(card_serie, 'title', 'Untitled Event')
@@ -233,8 +234,16 @@ class Database():
         # Get URL and description with empty string as fallback
         url_str = self._clean_text(getattr(card_serie, 'url', ''))
         description_str = self._build_description(card_serie)
-        
-        return (title, start_date, end_date, start_time, end_time, url_str, description_str)
+
+        # Notion's date granularity decides this; state rows written before the
+        # column existed fall back to the old midnight heuristic.
+        all_day = getattr(card_serie, 'all_day', None)
+        if all_day is None or (not isinstance(all_day, bool) and pd.isna(all_day)) or all_day == '':
+            all_day = (start_time == "00:00:00" and end_time == "00:00:00")
+        else:
+            all_day = bool(all_day)
+
+        return (title, start_date, end_date, start_time, end_time, url_str, description_str, all_day)
 
     def get_live(self)->pd.DataFrame:
         """Get a database corresponding to the actual state in Notion app

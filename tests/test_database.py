@@ -44,6 +44,7 @@ def stored_row(
 def live_row(
     page_id,
     title="Task",
+    all_day=False,
     last_edit=datetime(2025, 1, 1, 9, 0, 0),
     start=datetime(2025, 1, 2, 9, 0, 0),
     end=datetime(2025, 1, 2, 10, 0, 0),
@@ -60,6 +61,7 @@ def live_row(
         "url": url,
         "description": description,
         "flight_code": flight_code,
+        "all_day": all_day,
     }
 
 
@@ -189,8 +191,44 @@ class DatabaseTests(unittest.TestCase):
                     "10:45:00",
                     "https://example.com",
                     "Notes",
+                    False,
                 ),
             )
+
+    def test_get_card_for_calendar_passes_notion_all_day_flag(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            midnight_timed = pd.Series(
+                {
+                    "title": "Red eye",
+                    "start_date": datetime(2025, 1, 2, 0, 0, 0),
+                    "end_date": datetime(2025, 1, 2, 0, 0, 0),
+                    "url": "",
+                    "description": "",
+                    "all_day": False,
+                }
+            )
+            all_day = midnight_timed.copy()
+            all_day["all_day"] = True
+
+            # A midnight-to-midnight timed event must not become an all-day event
+            self.assertFalse(database._get_card_for_calendar(midnight_timed)[7])
+            self.assertTrue(database._get_card_for_calendar(all_day)[7])
+
+    def test_get_card_for_calendar_falls_back_to_midnight_heuristic(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            legacy = pd.Series(
+                {
+                    "title": "Old row",
+                    "start_date": datetime(2025, 1, 2, 0, 0, 0),
+                    "end_date": datetime(2025, 1, 2, 0, 0, 0),
+                    "url": "",
+                    "description": "",
+                }
+            )
+
+            self.assertTrue(database._get_card_for_calendar(legacy)[7])
 
     def test_get_card_for_calendar_prepends_flight_code_to_description(self):
         with tempfile.TemporaryDirectory() as folder:

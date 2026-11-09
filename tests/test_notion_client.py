@@ -64,6 +64,7 @@ class CardTests(unittest.TestCase):
                 "url": "https://example.com",
                 "description": "",
                 "flight_code": "",
+                "all_day": True,
             },
         )
 
@@ -78,6 +79,14 @@ class CardTests(unittest.TestCase):
         self.assertEqual(card.start_date, datetime(2025, 1, 15, 9, 30, 0))
         self.assertEqual(card.end_date, datetime(2025, 1, 15, 10, 45, 0))
         self.assertEqual(card.description, "A useful note")
+
+    def test_card_marks_bare_date_as_all_day(self):
+        self.assertTrue(Card(notion_page(start="2025-01-15")).all_day)
+
+    def test_card_marks_timestamped_date_as_timed(self):
+        card = Card(notion_page(start="2025-01-15T00:00:00.000-08:00"))
+
+        self.assertFalse(card.all_day)
 
     def test_card_parses_flight_code(self):
         card = Card(notion_page(title="Flight TPE -> BKK", flight_code="CI833"))

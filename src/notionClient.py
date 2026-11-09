@@ -32,6 +32,7 @@ class Card:
         self.url = ""
         self.description = ""
         self.flight_code = ""
+        self.all_day = False
 
         try:
             self._id = page['id']
@@ -40,7 +41,11 @@ class Card:
             if (len(title)>0):
                 self.title = title[0].get('plain_text')
                 self.last_edited_time = self._convert_datetime(page.get('last_edited_time'))
-                self.start_date = self._convert_datetime(properties.get('Date').get('date').get('start'))
+                start_raw = properties.get('Date').get('date').get('start')
+                # Notion sends a bare date for all-day entries and a full
+                # timestamp for timed ones; that is the only reliable signal.
+                self.all_day = 'T' not in (start_raw or 'T')
+                self.start_date = self._convert_datetime(start_raw)
                 end_date = self._convert_datetime(properties.get('Date').get('date').get('end'))
                 if end_date is None:
                     self.end_date = self.start_date
@@ -109,12 +114,13 @@ class Card:
             'title': self.title,
             'url': self.url,
             'description': self.description,
-            'flight_code': self.flight_code
+            'flight_code': self.flight_code,
+            'all_day': self.all_day
         }
         return _dict
 
     def __repr__(self) -> str:
-        return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}\nflight code : {self.flight_code}"
+        return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}\nflight code : {self.flight_code}\nall day : {self.all_day}"
 
     def _convert_datetime(self, notion_datetime: str) -> datetime:
         """Helper function to normalize datetimes

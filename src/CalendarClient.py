@@ -50,7 +50,7 @@ class CalendarClient:
         return ' & return & '.join(lines)
 
     def add_event(self, title: str, start_date: str, end_date: str, start_time: str, end_time: str
-        , url_str: str, description_str: str) -> str:
+        , url_str: str, description_str: str, all_day: bool = None) -> str:
         """Adds an event to Calendar
         Summary is set to `title` and we define the start datetime and end datetime with the provided arguments
 
@@ -62,6 +62,8 @@ class CalendarClient:
             end_time (str) : format `%H:%M:%S`
             url_str (str) : url of the event
             description_str (str) : description of the event
+            all_day (bool, optional) : whether the Notion date was a bare date. When
+                None, falls back to treating a midnight-to-midnight span as all-day.
         
         Returns:
             str : Id of the newly created event
@@ -72,7 +74,10 @@ class CalendarClient:
         cmd = f'set theStartDate to date "{start_applescript}"\n'
 
         # Adjust end date for inclusivity
-        is_all_day = (start_time == "00:00:00" and end_time == "00:00:00")
+        if all_day is None:
+            is_all_day = (start_time == "00:00:00" and end_time == "00:00:00")
+        else:
+            is_all_day = bool(all_day)
         if is_all_day:
             # For all-day events, add one day to the end date to make it inclusive
             end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
