@@ -105,11 +105,12 @@ class CalendarClient:
         if description_str:
             cmd += f'                set description of newEvent to {self.applescript_multiline(description_str)}\n'
         # Add code to return the event ID
+        # `save` has to come before the return, or it never runs
         cmd += """
                 set eventId to id of newEvent
-                return eventId
             end tell
             save
+            return eventId
         end tell
         """
         # Log variables used in the AppleScript for debugging

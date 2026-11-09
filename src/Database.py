@@ -232,14 +232,6 @@ class Database():
                         end_time = '23:59:59'
                 else:
                     end_date = end_str if end_str != 'NaT' else start_date
-                    # For all-day events, if end time is 00:00:00, subtract one day from the end date
-                    if ' ' in end_str and end_str.endswith('00:00:00'):
-                        try:
-                            end_date_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                            end_date_dt = end_date_dt - timedelta(days=1)
-                            end_date = end_date_dt.strftime('%Y-%m-%d')
-                        except Exception:
-                            pass
                     end_time = '23:59:59'  # Default to end of day if no time provided
                 
                 # Validate date format
@@ -284,19 +276,6 @@ class Database():
             return pd.DataFrame(current_as_dict).set_index('id')
         else:
             return self._empty()
-
-    def get_outdated(self)->List:
-        """Returns a list of index that correspond to finished events in the database 
-
-        Returns:
-            List: list of index
-        """
-        outdated = list(self.df[self.df.end_date.dt.date < datetime.now().date()].index)
-        logging.info(f"{len(outdated)} outdated events found")
-        for id in outdated:
-            logging.info(f"{id} is outdated")
-        return outdated
-
 
     def get_deleted(self,current=None)->List:
         """Returns a list of index of events deleted from the Notion app
