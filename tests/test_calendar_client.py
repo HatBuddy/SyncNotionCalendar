@@ -162,6 +162,33 @@ class CalendarClientTests(unittest.TestCase):
 
         self.assertEqual(str(raised.exception), "Failed to add event to Work calendar")
 
+    def test_delete_event_reports_success(self):
+        client = CalendarClient("Work")
+
+        with patch(
+            "src.CalendarClient.applescript.run",
+            return_value=AppleScriptResult(),
+        ):
+            self.assertTrue(client.delete_event("calendar-event-1"))
+
+    def test_delete_event_treats_a_missing_event_as_gone(self):
+        client = CalendarClient("Work")
+        missing = AppleScriptResult(
+            err='Calendar got an error: Can\u2019t get event id "x" of calendar "Work". (-1728)'
+        )
+
+        with patch("src.CalendarClient.applescript.run", return_value=missing):
+            self.assertTrue(client.delete_event("x"))
+
+    def test_delete_event_reports_a_real_failure(self):
+        client = CalendarClient("Work")
+
+        with patch(
+            "src.CalendarClient.applescript.run",
+            return_value=AppleScriptResult(err="Calendar is not responding (-1712)"),
+        ):
+            self.assertFalse(client.delete_event("calendar-event-1"))
+
     def test_delete_event_runs_applescript(self):
         client = CalendarClient("Work")
 

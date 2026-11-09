@@ -84,10 +84,11 @@ def live_row(
 
 
 class FakeCalendarClient:
-    def __init__(self, event_ids=None):
+    def __init__(self, event_ids=None, delete_succeeds=True):
         self.event_ids = list(event_ids or [])
         self.added = []
         self.deleted = []
+        self.delete_succeeds = delete_succeeds
 
     def add_event(self, *args):
         self.added.append(args)
@@ -95,6 +96,7 @@ class FakeCalendarClient:
 
     def delete_event(self, event_id):
         self.deleted.append(event_id)
+        return self.delete_succeeds
 
 
 class DatabaseTests(unittest.TestCase):
@@ -213,6 +215,37 @@ class DatabaseTests(unittest.TestCase):
                     False,
                 ),
             )
+
+    def test_modify_events_does_not_re_add_when_the_delete_fails(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            database.calendar_client = FakeCalendarClient(delete_succeeds=False)
+            database.df = stored_frame(
+                [stored_row("page-1", title="Old", event_id="calendar-event-1")]
+            )
+            current = live_frame(
+                [live_row("page-1", title="New", last_edit=datetime(2025, 1, 1, 10, 0, 0))]
+            )
+
+            database.modify_events(["page-1"], current=current)
+
+            # a second copy of the event would otherwise be created
+            self.assertEqual(database.calendar_client.added, [])
+            self.assertEqual(database.df.loc["page-1", "title"], "Old")
+            self.assertEqual(database.df.loc["page-1", "event_id"], "calendar-event-1")
+
+    def test_remove_events_keeps_the_row_when_the_delete_fails(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            database.calendar_client = FakeCalendarClient(delete_succeeds=False)
+            database.df = stored_frame(
+                [stored_row("page-1", event_id="calendar-event-1")]
+            )
+
+            database.remove_events(["page-1"])
+
+            # the event is still on the calendar, so the row must survive to retry
+            self.assertIn("page-1", database.df.index)
 
     def test_get_card_for_calendar_renders_utc_in_the_machine_zone(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -325,7 +325,11 @@ class Database():
         """
         for id in list_id:
             event_id = self.df.loc[id,'event_id']
-            self.calendar_client.delete_event(event_id)
+            if not self.calendar_client.delete_event(event_id):
+                # Keep the row so the next run retries rather than losing track
+                # of an event that is still on the calendar
+                logging.error(f"card {id} kept in the database: event {event_id} could not be deleted")
+                continue
             self.df = self.df.drop(id)
             logging.info(f"card {id} has been deleted from the database")
         self.save()
@@ -384,7 +388,11 @@ class Database():
             current = self.get_live()
         for id in list_id:
             modified_event = current.loc[id].copy()
-            self.calendar_client.delete_event(self.df.loc[id,'event_id'])
+            old_event_id = self.df.loc[id,'event_id']
+            if not self.calendar_client.delete_event(old_event_id):
+                # Re-adding now would leave two copies of the event
+                logging.error(f"{id} left unchanged: event {old_event_id} could not be deleted")
+                continue
             new_event_id = self.calendar_client.add_event(*self._get_card_for_calendar(modified_event))
             modified_event['event_id'] = new_event_id
             self.df.loc[id] = modified_event

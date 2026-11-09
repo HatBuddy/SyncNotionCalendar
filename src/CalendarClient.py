@@ -141,15 +141,20 @@ class CalendarClient:
             logging.error(f"Unexpected error while adding event '{title}': {str(e)}")
             raise
 
-    def delete_event(self, id: str) -> None:
+    def delete_event(self, id: str) -> bool:
         """Remove event with id from Calendar
 
         Args:
             id (str) : id of the event to remove
+
+        Returns:
+            bool: True when the event is gone from Calendar, either because it
+                was deleted now or because it was already absent. False when the
+                delete failed and the event may still be there.
         """
         cmd = f"""
         tell application "Calendar"
-            tell calendar "{self.name}"
+            tell calendar "{self.applescript_escape(self.name)}"
             delete event id "{id}"
             save
             end tell
@@ -157,7 +162,11 @@ class CalendarClient:
         """
         r = applescript.run(cmd)
         if r.err:
+            # -1728 is AppleScript's "object not found": nothing left to delete
+            if '-1728' in r.err:
+                logging.warning(f"event {id} was already absent from {self.name}")
+                return True
             logging.error(f"failed to delete event {id}. Applescript error : {r.err}")
-            # raise Exception(r.err)
-        else:
-            logging.info(f"event {id} removed")
+            return False
+        logging.info(f"event {id} removed")
+        return True
