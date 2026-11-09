@@ -65,6 +65,8 @@ class CardTests(unittest.TestCase):
                 "description": "",
                 "flight_code": "",
                 "all_day": True,
+                "start_notion": "2025-01-15",
+                "end_notion": "2025-01-15",
             },
         )
 
@@ -80,6 +82,24 @@ class CardTests(unittest.TestCase):
         self.assertEqual(card.start_date, datetime(2025, 1, 15, 17, 30, 0))
         self.assertEqual(card.end_date, datetime(2025, 1, 15, 18, 45, 0))
         self.assertEqual(card.description, "A useful note")
+
+    def test_card_keeps_the_notion_timestamp_verbatim(self):
+        card = Card(
+            notion_page(
+                start="2026-11-15T13:20:00.000+07:00",
+                end="2026-11-15T15:50:00.000+07:00",
+            )
+        )
+
+        # UTC for arithmetic, the Notion string for human eyes
+        self.assertEqual(card.start_date, datetime(2026, 11, 15, 6, 20, 0))
+        self.assertEqual(card.start_notion, "2026-11-15T13:20:00.000+07:00")
+        self.assertEqual(card.end_notion, "2026-11-15T15:50:00.000+07:00")
+
+    def test_card_falls_back_to_start_for_a_missing_end(self):
+        card = Card(notion_page(start="2026-11-15T13:20:00.000+07:00", end=None))
+
+        self.assertEqual(card.end_notion, "2026-11-15T13:20:00.000+07:00")
 
     def test_card_keeps_the_departure_zone_offset_as_the_instant(self):
         # Notion carries the zone the time was entered in; dropping it moved

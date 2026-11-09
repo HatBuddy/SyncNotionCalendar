@@ -40,6 +40,8 @@ class Database():
                 'last_edit',
                 'start_date',
                 'end_date',
+                'start_notion',
+                'end_notion',
                 'title',
                 'url',
                 'description',

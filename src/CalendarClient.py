@@ -128,7 +128,10 @@ class CalendarClient:
             event_id = None
             if r.out:
                 event_id = r.out.strip().split()[-1]
-                logging.info(f"Successfully added '{title}' to {self.name} calendar, event_id: {event_id}")
+                logging.info(
+                    f"Successfully added '{title}' to {self.name} calendar at "
+                    f"{start_applescript} (local time), event_id: {event_id}"
+                )
             else:
                 logging.warning(f"Added '{title}' to {self.name} calendar but no event_id was returned")
             

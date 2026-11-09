@@ -399,6 +399,28 @@ class DatabaseTests(unittest.TestCase):
                 set(database.get_modified(current=current)), {"flight", "note"}
             )
 
+    def test_notion_timestamps_are_stored_but_do_not_trigger_resync(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            current = live_frame([live_row("page-1")])
+            current["start_notion"] = "2026-11-15T13:20:00.000+07:00"
+            current["end_notion"] = "2026-11-15T15:50:00.000+07:00"
+
+            database.add_events(["page-1"], current=current)
+
+            persisted = pd.read_csv(
+                os.path.join(folder, "database-id.csv"), index_col="id"
+            )
+            self.assertEqual(
+                persisted.loc["page-1", "start_notion"],
+                "2026-11-15T13:20:00.000+07:00",
+            )
+
+            # a readable-only column must not make the event look modified
+            current.loc["page-1", "start_notion"] = "2026-11-15T14:20:00.000+08:00"
+            current.loc["page-1", "last_edit"] = datetime(2025, 6, 1, 9, 0, 0)
+            self.assertEqual(database.get_modified(current=current), [])
+
     def test_get_modified_detects_url_changes(self):
         with tempfile.TemporaryDirectory() as folder:
             database = self.make_database(folder)

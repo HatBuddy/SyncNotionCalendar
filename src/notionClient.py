@@ -33,6 +33,8 @@ class Card:
         self.description = ""
         self.flight_code = ""
         self.all_day = False
+        self.start_notion = ""
+        self.end_notion = ""
 
         try:
             self._id = page['id']
@@ -46,7 +48,12 @@ class Card:
                 # timestamp for timed ones; that is the only reliable signal.
                 self.all_day = 'T' not in (start_raw or 'T')
                 self.start_date = self._convert_datetime(start_raw)
-                end_date = self._convert_datetime(properties.get('Date').get('date').get('end'))
+                end_raw = properties.get('Date').get('date').get('end')
+                end_date = self._convert_datetime(end_raw)
+                # Kept verbatim so the state file stays readable: these show the
+                # time as entered in Notion, with the zone it belongs to.
+                self.start_notion = start_raw or ""
+                self.end_notion = end_raw or self.start_notion
                 if end_date is None:
                     self.end_date = self.start_date
                 else:
@@ -111,6 +118,8 @@ class Card:
             'last_edit': self.last_edited_time,
             'start_date': self.start_date,
             'end_date': self.end_date,
+            'start_notion': self.start_notion,
+            'end_notion': self.end_notion,
             'title': self.title,
             'url': self.url,
             'description': self.description,
