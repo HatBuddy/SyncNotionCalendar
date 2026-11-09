@@ -25,6 +25,17 @@ class CalendarClientTests(unittest.TestCase):
 
         self.assertEqual(escaped, "xxx...")
 
+    def test_truncation_is_logged(self):
+        client = CalendarClient("Work")
+
+        with self.assertLogs(level="WARNING") as logs:
+            client.applescript_escape("x" * 5, max_length=3)
+        self.assertIn("truncating", logs.output[0])
+
+        with self.assertLogs(level="WARNING") as logs:
+            client.applescript_multiline("x" * 5, max_length=3)
+        self.assertIn("truncating", logs.output[0])
+
     def test_applescript_multiline_keeps_line_breaks(self):
         client = CalendarClient("Work")
 

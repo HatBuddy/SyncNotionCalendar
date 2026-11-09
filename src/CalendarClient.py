@@ -23,8 +23,8 @@ class CalendarClient:
         Converts both literal '\\n' and real newlines to a space, and truncates if too long."""
         if not isinstance(s, str):
             s = str(s)
-        # Truncate long descriptions for testing (AppleScript/Calendar may have limits)
         if len(s) > max_length:
+            logging.warning(f"truncating a {len(s)} character value to {max_length} characters")
             s = s[:max_length] + "..."
         # Replace literal backslash-n, real newlines, and carriage returns with a space
         s = s.replace('\\n', ' ').replace('\n', ' ').replace('\r', '')
@@ -41,6 +41,7 @@ class CalendarClient:
         if not isinstance(s, str):
             s = str(s)
         if len(s) > max_length:
+            logging.warning(f"truncating a {len(s)} character description to {max_length} characters")
             s = s[:max_length] + "..."
         s = s.replace('\\n', '\n').replace('\r\n', '\n').replace('\r', '\n')
         lines = [
