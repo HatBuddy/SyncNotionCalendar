@@ -291,6 +291,45 @@ class DatabaseTests(unittest.TestCase):
                     args = database._get_card_for_calendar(card)
                 self.assertEqual(args[1:5], ("2026-09-16", "2026-09-16", "00:00:00", "00:00:00"), zone)
 
+    def test_get_card_for_calendar_gives_an_endless_event_one_hour(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            # Notion with no end time yields end == start
+            card = pd.Series(
+                {
+                    "title": "Flight BKK -> TFU",
+                    "start_date": datetime(2026, 11, 15, 6, 20, 0),
+                    "end_date": datetime(2026, 11, 15, 6, 20, 0),
+                    "url": "",
+                    "description": "",
+                    "all_day": False,
+                }
+            )
+
+            with local_timezone("UTC"):
+                args = database._get_card_for_calendar(card)
+
+            self.assertEqual(args[1:5], ("2026-11-15", "2026-11-15", "06:20:00", "07:20:00"))
+
+    def test_get_card_for_calendar_keeps_a_real_end_time(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            card = pd.Series(
+                {
+                    "title": "Flight",
+                    "start_date": datetime(2026, 11, 15, 6, 20, 0),
+                    "end_date": datetime(2026, 11, 15, 8, 50, 0),
+                    "url": "",
+                    "description": "",
+                    "all_day": False,
+                }
+            )
+
+            with local_timezone("UTC"):
+                args = database._get_card_for_calendar(card)
+
+            self.assertEqual(args[4], "08:50:00")
+
     def test_get_card_for_calendar_passes_notion_all_day_flag(self):
         with tempfile.TemporaryDirectory() as folder:
             database = self.make_database(folder)

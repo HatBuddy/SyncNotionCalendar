@@ -256,6 +256,20 @@ class Database():
         else:
             all_day = bool(all_day)
 
+        # A Notion date with no end time gives end == start, which Calendar takes
+        # on creation but rejects on edit ("start date must be before the end
+        # date"), so give it the documented one hour.
+        if not all_day:
+            try:
+                start_dt = datetime.strptime(f"{start_date} {start_time}", '%Y-%m-%d %H:%M:%S')
+                end_dt = datetime.strptime(f"{end_date} {end_time}", '%Y-%m-%d %H:%M:%S')
+                if end_dt <= start_dt:
+                    end_dt = start_dt + timedelta(hours=1)
+                    end_date = end_dt.strftime('%Y-%m-%d')
+                    end_time = end_dt.strftime('%H:%M:%S')
+            except ValueError:
+                logging.warning(f"could not check the duration of '{title}'")
+
         # Timed events are stored as UTC; all-day entries are plain calendar days
         if not all_day:
             start_date, start_time = self._utc_to_local(start_date, start_time)
