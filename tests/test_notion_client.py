@@ -76,9 +76,35 @@ class CardTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(card.start_date, datetime(2025, 1, 15, 9, 30, 0))
-        self.assertEqual(card.end_date, datetime(2025, 1, 15, 10, 45, 0))
+        # stored as naive UTC: 09:30-08:00 is 17:30 UTC
+        self.assertEqual(card.start_date, datetime(2025, 1, 15, 17, 30, 0))
+        self.assertEqual(card.end_date, datetime(2025, 1, 15, 18, 45, 0))
         self.assertEqual(card.description, "A useful note")
+
+    def test_card_keeps_the_departure_zone_offset_as_the_instant(self):
+        # Notion carries the zone the time was entered in; dropping it moved
+        # the event by hours.
+        card = Card(notion_page(start="2026-11-15T13:20:00.000+07:00"))
+
+        self.assertEqual(card.start_date, datetime(2026, 11, 15, 6, 20, 0))
+
+    def test_card_converts_each_offset_to_the_same_utc_instant(self):
+        bangkok = Card(notion_page(start="2026-11-15T13:20:00.000+07:00")).start_date
+        tokyo = Card(notion_page(start="2026-11-15T15:20:00.000+09:00")).start_date
+        seattle = Card(notion_page(start="2026-11-14T22:20:00.000-08:00")).start_date
+
+        self.assertEqual(bangkok, tokyo)
+        self.assertEqual(bangkok, seattle)
+
+    def test_card_stores_last_edit_in_utc(self):
+        card = Card(notion_page(last_edited_time="2025-04-17T23:22:00.000Z"))
+
+        self.assertEqual(card.last_edited_time, datetime(2025, 4, 17, 23, 22, 0))
+
+    def test_card_leaves_bare_dates_unshifted(self):
+        card = Card(notion_page(start="2026-11-15"))
+
+        self.assertEqual(card.start_date, datetime(2026, 11, 15, 0, 0, 0))
 
     def test_card_marks_bare_date_as_all_day(self):
         self.assertTrue(Card(notion_page(start="2025-01-15")).all_day)

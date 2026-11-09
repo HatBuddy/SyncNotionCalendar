@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 import pandas as pd
 import os
@@ -71,6 +71,25 @@ class Database():
         """Saves the database as a .csv file
         """
         self.df.to_csv(self._path)
+
+    @staticmethod
+    def _utc_to_local(date_str: str, time_str: str) -> Tuple:
+        """Converts a stored UTC date/time pair to the local wall clock.
+
+        AppleScript reads date literals in the time zone the machine is set to,
+        so the instant is only written correctly if we hand it the local wall
+        clock of the moment the sync runs.
+
+        Args:
+            date_str (str): format `%Y-%m-%d`, in UTC
+            time_str (str): format `%H:%M:%S`, in UTC
+
+        Returns:
+            Tuple: (date_str, time_str) in local time
+        """
+        parsed = datetime.strptime(f"{date_str} {time_str}", '%Y-%m-%d %H:%M:%S')
+        local = parsed.replace(tzinfo=timezone.utc).astimezone()
+        return local.strftime('%Y-%m-%d'), local.strftime('%H:%M:%S')
 
     @staticmethod
     def _clean_text(value) -> str:
@@ -242,6 +261,11 @@ class Database():
             all_day = (start_time == "00:00:00" and end_time == "00:00:00")
         else:
             all_day = bool(all_day)
+
+        # Timed events are stored as UTC; all-day entries are plain calendar days
+        if not all_day:
+            start_date, start_time = self._utc_to_local(start_date, start_time)
+            end_date, end_time = self._utc_to_local(end_date, end_time)
 
         return (title, start_date, end_date, start_time, end_time, url_str, description_str, all_day)
 

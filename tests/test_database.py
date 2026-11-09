@@ -1,11 +1,29 @@
+import contextlib
 import os
 import tempfile
+import time
 import unittest
 from datetime import datetime
 
 import pandas as pd
 
 from src.Database import Database
+
+
+@contextlib.contextmanager
+def local_timezone(name):
+    """Pins the process time zone so conversions are machine independent."""
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = name
+    time.tzset()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
 
 
 def stored_frame(rows):
@@ -179,7 +197,8 @@ class DatabaseTests(unittest.TestCase):
                 }
             )
 
-            args = database._get_card_for_calendar(card)
+            with local_timezone("UTC"):
+                args = database._get_card_for_calendar(card)
 
             self.assertEqual(
                 args,
@@ -194,6 +213,50 @@ class DatabaseTests(unittest.TestCase):
                     False,
                 ),
             )
+
+    def test_get_card_for_calendar_renders_utc_in_the_machine_zone(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            # 06:20 UTC is the 13:20+07:00 departure Notion holds
+            card = pd.Series(
+                {
+                    "title": "Flight BKK -> TFU",
+                    "start_date": datetime(2026, 11, 15, 6, 20, 0),
+                    "end_date": datetime(2026, 11, 15, 8, 50, 0),
+                    "url": "",
+                    "description": "",
+                    "all_day": False,
+                }
+            )
+
+            with local_timezone("Asia/Bangkok"):
+                in_bangkok = database._get_card_for_calendar(card)
+            with local_timezone("America/Los_Angeles"):
+                in_seattle = database._get_card_for_calendar(card)
+
+            # Same instant, rendered in whichever zone the Mac is set to
+            self.assertEqual(in_bangkok[1:5], ("2026-11-15", "2026-11-15", "13:20:00", "15:50:00"))
+            # the flight crosses midnight once rendered in Pacific
+            self.assertEqual(in_seattle[1:5], ("2026-11-14", "2026-11-15", "22:20:00", "00:50:00"))
+
+    def test_get_card_for_calendar_never_shifts_all_day_events(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.make_database(folder)
+            card = pd.Series(
+                {
+                    "title": "Scuba Diving Mallorca",
+                    "start_date": datetime(2026, 9, 16, 0, 0, 0),
+                    "end_date": datetime(2026, 9, 16, 0, 0, 0),
+                    "url": "",
+                    "description": "",
+                    "all_day": True,
+                }
+            )
+
+            for zone in ("Asia/Bangkok", "America/Los_Angeles", "UTC"):
+                with local_timezone(zone):
+                    args = database._get_card_for_calendar(card)
+                self.assertEqual(args[1:5], ("2026-09-16", "2026-09-16", "00:00:00", "00:00:00"), zone)
 
     def test_get_card_for_calendar_passes_notion_all_day_flag(self):
         with tempfile.TemporaryDirectory() as folder:

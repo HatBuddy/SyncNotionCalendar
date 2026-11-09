@@ -1,6 +1,6 @@
 import requests
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 
@@ -123,22 +123,30 @@ class Card:
         return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}\nflight code : {self.flight_code}\nall day : {self.all_day}"
 
     def _convert_datetime(self, notion_datetime: str) -> datetime:
-        """Helper function to normalize datetimes
+        """Helper function to normalize datetimes to naive UTC.
+
+        Notion sends timestamps with the offset of the time zone the date was
+        entered in, e.g. `2026-11-15T13:20:00.000+07:00`. Dropping that offset
+        would move the event by hours, so the instant is converted to UTC and
+        stored without a tzinfo. Storing UTC also keeps the state file stable
+        when the machine running the sync changes time zone.
+
+        Bare dates (all-day entries) carry no instant and are left untouched.
 
         Args:
             notion_datetime (str): datetime
 
         Returns:
-            datetime: datetime
+            datetime: naive datetime, in UTC for timestamps
         """
         if notion_datetime is None:
             return notion_datetime
-        tmp = notion_datetime.split('T')
-        if len(tmp) == 1:
-            return datetime.strptime(f'{tmp[0]} 00:00:00', '%Y-%m-%d %H:%M:%S')
-        else:
-            time = tmp[1][:8]
-            return datetime.strptime(f'{tmp[0]} {time}', '%Y-%m-%d %H:%M:%S')
+        if 'T' not in notion_datetime:
+            return datetime.strptime(f'{notion_datetime} 00:00:00', '%Y-%m-%d %H:%M:%S')
+        parsed = datetime.fromisoformat(notion_datetime.replace('Z', '+00:00'))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed.replace(microsecond=0)
 
 
 class NotionClient:
