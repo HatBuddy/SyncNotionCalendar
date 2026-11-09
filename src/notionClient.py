@@ -17,6 +17,7 @@ class Card:
         - start datetime
         - end datetime : if not provided set to start datetime
         - Description
+        - Flight Code
         - Url
 
         Args:
@@ -30,25 +31,69 @@ class Card:
         self.end_date = None
         self.url = ""
         self.description = ""
-        
+        self.flight_code = ""
+
         try:
             self._id = page['id']
-            title = page.get('properties').get('Name').get('title')
-            if (len(title)>0): 
+            properties = page.get('properties') or {}
+            title = properties.get('Name').get('title')
+            if (len(title)>0):
                 self.title = title[0].get('plain_text')
                 self.last_edited_time = self._convert_datetime(page.get('last_edited_time'))
-                self.start_date = self._convert_datetime(page.get('properties').get('Date').get('date').get('start'))
-                end_date = self._convert_datetime(page.get('properties').get('Date').get('date').get('end'))
+                self.start_date = self._convert_datetime(properties.get('Date').get('date').get('start'))
+                end_date = self._convert_datetime(properties.get('Date').get('date').get('end'))
                 if end_date is None:
                     self.end_date = self.start_date
                 else:
                     self.end_date = end_date
-                self.url = page.get('properties').get('URL').get('url') or ""
-                self.description = page.get('properties').get('Description').get('rich_text')[0].get('plain_text') if  len(page.get('properties').get('Description').get('rich_text')) > 0 else ""
+                self.url = self._url(properties, 'URL')
+                self.description = self._rich_text(properties, 'Description')
+                # Flights store their flight number in a dedicated property
+                self.flight_code = self._normalize_spaces(self._rich_text(properties, 'Flight Code'))
         except Exception as e:
             logging.error(f"Failed to parse Notion card {self._id}: {e}")
             raise
 
+    @staticmethod
+    def _rich_text(properties: Dict, name: str) -> str:
+        """Returns the plain text of a rich_text property, or "" when absent/empty
+
+        Args:
+            properties (Dict): `properties` dict of a Notion page
+            name (str): name of the property
+
+        Returns:
+            str: concatenation of every text chunk of the property
+        """
+        prop = properties.get(name) or {}
+        chunks = prop.get('rich_text') or []
+        return ''.join(chunk.get('plain_text') or '' for chunk in chunks)
+
+    @staticmethod
+    def _url(properties: Dict, name: str) -> str:
+        """Returns the value of a url property, or "" when absent/empty
+
+        Args:
+            properties (Dict): `properties` dict of a Notion page
+            name (str): name of the property
+
+        Returns:
+            str: url
+        """
+        prop = properties.get(name) or {}
+        return prop.get('url') or ""
+
+    @staticmethod
+    def _normalize_spaces(text: str) -> str:
+        """Collapses every run of whitespace (including non-breaking spaces) into a single space
+
+        Args:
+            text (str): text to normalize
+
+        Returns:
+            str: normalized text
+        """
+        return ' '.join(text.split())
 
     def to_dict(self) -> Dict:
         """Returns a representation of the card object as a Dict
@@ -63,12 +108,13 @@ class Card:
             'end_date': self.end_date,
             'title': self.title,
             'url': self.url,
-            'description': self.description
+            'description': self.description,
+            'flight_code': self.flight_code
         }
         return _dict
 
     def __repr__(self) -> str:
-        return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}"
+        return f"id : {self._id}\ntitle : {self.title}\nstart : {self.start_date}\nend : {self.end_date}\nlast edit : {self.last_edited_time}\nurl : {self.url}\ndescription : {self.description}\nflight code : {self.flight_code}"
 
     def _convert_datetime(self, notion_datetime: str) -> datetime:
         """Helper function to normalize datetimes

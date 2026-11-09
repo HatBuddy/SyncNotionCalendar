@@ -25,6 +25,7 @@ The following properties **must exist with these exact names and types**. The na
 | `Date` | Date | Yes | Must have a start date set. The "End date" option should be enabled for multi-day or ranged events. |
 | `URL` | URL | Yes | Can be left empty per event, but the column must exist. |
 | `Description` | Text | Yes | Can be left empty per event, but the column must exist. |
+| `Flight Code` | Text | No | Flight number(s) of a flight, e.g. `CI833`. Synced into the Calendar notes. Omit the column entirely if you do not track flights. |
 
 > The `Name` property is Notion's default title field that every database already has. Do not rename it to anything else.
 
@@ -50,8 +51,14 @@ The following properties **must exist with these exact names and types**. The na
 
 ### Description
 - Maps to the **notes/description field** of the Calendar event.
-- Only the first block of text is synced (plain text only — formatting is not preserved).
+- The whole text is synced as plain text (formatting is not preserved); line breaks are kept.
 - Leave empty if not needed; the column must still exist in the database.
+
+### Flight Code
+- Prepended to the Calendar **notes/description** as `Flight: <code>`, e.g. `Flight: CI833`.
+- When `Description` is also filled, the flight line comes first, then a blank line, then the description.
+- Extra whitespace is collapsed, so `KL  1819 ` is synced as `KL 1819`.
+- Optional: the column can be absent, and rows can leave it empty.
 
 ---
 
@@ -63,7 +70,7 @@ The following properties **must exist with these exact names and types**. The na
 | `Date` (start) | Start date/time |
 | `Date` (end) | End date/time |
 | `URL` | URL |
-| `Description` | Notes |
+| `Flight Code` + `Description` | Notes |
 
 Sync is **one-way: Notion → Apple Calendar**. Changes made directly in Apple Calendar are not written back to Notion.
 
@@ -76,9 +83,9 @@ Sync is **one-way: Notion → Apple Calendar**. Changes made directly in Apple C
 | Add a row with a date | New event created |
 | Change the title, start date, or end date | Event deleted and re-created with updated details |
 | Delete a row | Event deleted |
-| Change only `URL` or `Description` | No update (these fields do not trigger a re-sync) |
+| Change only `URL`, `Description` or `Flight Code` | Event deleted and re-created with updated details |
 
-> Modifications are only detected when Notion's built-in `Last edited time` changes **and** the title or dates differ. Changing only the URL or description updates `Last edited time` in Notion but will not re-sync the Calendar event.
+> Modifications are only detected when Notion's built-in `Last edited time` changes **and** one of the synced fields (title, dates, URL, description, flight code) differs from what was last synced. Editing a row in Notion without changing any synced field leaves the Calendar event untouched.
 
 ---
 

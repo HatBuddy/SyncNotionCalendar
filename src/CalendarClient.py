@@ -30,6 +30,25 @@ class CalendarClient:
         s = s.replace('\\n', ' ').replace('\n', ' ').replace('\r', '')
         return s.replace('\\', '\\\\').replace('"', '\\"')
 
+    def applescript_multiline(self, s: str, max_length: int = 900) -> str:
+        """Build an AppleScript string expression that keeps line breaks.
+
+        Calendar descriptions are often multi-line, so instead of flattening them
+        the text is returned as quoted chunks joined by AppleScript `return`,
+        e.g. '"Flight: CI833" & return & "Seat 32A"'. Both literal '\\n' and real
+        newlines count as line breaks.
+        """
+        if not isinstance(s, str):
+            s = str(s)
+        if len(s) > max_length:
+            s = s[:max_length] + "..."
+        s = s.replace('\\n', '\n').replace('\r\n', '\n').replace('\r', '\n')
+        lines = [
+            '"' + line.replace('\\', '\\\\').replace('"', '\\"') + '"'
+            for line in s.split('\n')
+        ]
+        return ' & return & '.join(lines)
+
     def add_event(self, title: str, start_date: str, end_date: str, start_time: str, end_time: str
         , url_str: str, description_str: str) -> str:
         """Adds an event to Calendar
@@ -79,7 +98,7 @@ class CalendarClient:
             cmd += f"                set url of newEvent to \"{self.applescript_escape(url_str)}\"\n"
         # Only add description if not None or empty
         if description_str:
-            cmd += f'                set description of newEvent to "{self.applescript_escape(description_str)}"\n'
+            cmd += f'                set description of newEvent to {self.applescript_multiline(description_str)}\n'
         # Add code to return the event ID
         cmd += """
                 set eventId to id of newEvent

@@ -22,12 +22,14 @@ class Database():
         self.id = id
         
         if os.path.exists(self._path):
-            self.df = pd.read_csv(self._path,index_col='id',parse_dates=['last_edit','start_date','end_date'])
+            df = pd.read_csv(self._path,index_col='id',parse_dates=['last_edit','start_date','end_date'])
+            self.df = self._with_expected_columns(df)
         else:
             self.df = self._empty()
             self.save()
 
-    def _empty(self) -> pd.DataFrame:
+    @classmethod
+    def _empty(cls) -> pd.DataFrame:
         """Returns an empty DataFrame with the right columns and index
 
         Returns:
@@ -39,14 +41,106 @@ class Database():
                 'start_date',
                 'end_date',
                 'title',
+                'url',
+                'description',
+                'flight_code',
                 'event_id'
             ]).set_index('id')
         return df
+
+    @classmethod
+    def _with_expected_columns(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """Adds the columns missing from a state file written by an older version
+        (url, description, flight_code) so they get compared and persisted from now on
+
+        Args:
+            df (pd.DataFrame): dataframe read from the state file
+
+        Returns:
+            pd.DataFrame: dataframe with every expected column
+        """
+        expected = list(cls._empty().columns)
+        for column in expected:
+            if column not in df.columns:
+                df[column] = ''
+        extra = [column for column in df.columns if column not in expected]
+        return df[expected + extra]
 
     def save(self)->None:
         """Saves the database as a .csv file
         """
         self.df.to_csv(self._path)
+
+    @staticmethod
+    def _clean_text(value) -> str:
+        """Returns a trimmed string for a card field, or "" for missing values
+
+        pandas turns missing values into NaN/NaT, whose str() is "nan"/"NaT";
+        those must not end up in the Calendar event.
+
+        Args:
+            value: value read from a card
+
+        Returns:
+            str: cleaned text
+        """
+        if value is None or pd.isna(value):
+            return ""
+        text = str(value).strip()
+        if text in ("nan", "NaT", "None"):
+            return ""
+        return text
+
+    @staticmethod
+    def _column(frame: pd.DataFrame, name: str, default='') -> pd.Series:
+        """Returns a column of `frame`, or a column filled with `default` when absent.
+        Keeps comparisons working against state files written before the column existed.
+
+        Args:
+            frame (pd.DataFrame): dataframe
+            name (str): column name
+            default: value used when the column is missing
+
+        Returns:
+            pd.Series: column
+        """
+        if name in frame.columns:
+            return frame[name]
+        return pd.Series([default] * len(frame), index=frame.index)
+
+    @classmethod
+    def _text_column(cls, frame: pd.DataFrame, name: str) -> pd.Series:
+        """Returns a column of `frame` normalized for text comparison
+
+        Args:
+            frame (pd.DataFrame): dataframe
+            name (str): column name
+
+        Returns:
+            pd.Series: column of cleaned strings
+        """
+        return cls._column(frame, name).map(cls._clean_text)
+
+    def _build_description(self, card_serie: pd.Series) -> str:
+        """Builds the Calendar description of a card.
+        The flight code (`Flight Code` in Notion) is prepended to the description so
+        flights carry their flight number into Calendar.
+
+        Args:
+            card_serie (pd.Series): series that corresponds to a Notion card
+
+        Returns:
+            str: description of the calendar event
+        """
+        description = self._clean_text(getattr(card_serie, 'description', ''))
+        flight_code = self._clean_text(getattr(card_serie, 'flight_code', ''))
+
+        if not flight_code:
+            return description
+        flight_line = f"Flight: {flight_code}"
+        if not description:
+            return flight_line
+        return f"{flight_line}\n\n{description}"
 
     def _get_card_for_calendar(self, card_serie: pd.Series) -> Tuple:
         """Returns args to create an event
@@ -137,8 +231,8 @@ class Database():
             end_time = '23:59:59'
         
         # Get URL and description with empty string as fallback
-        url_str = str(getattr(card_serie, 'url', '')).strip()
-        description_str = str(getattr(card_serie, 'description', '')).strip()
+        url_str = self._clean_text(getattr(card_serie, 'url', ''))
+        description_str = self._build_description(card_serie)
         
         return (title, start_date, end_date, start_time, end_time, url_str, description_str)
 
@@ -204,7 +298,8 @@ class Database():
 
     def get_modified(self,current=None)->List:
         """Returns a list of index of events that have been modified from the Notion app.
-        An event is said to be modified when : last_edit has changed and either start datetime, end datetime or title has changed too
+        An event is said to be modified when : last_edit has changed and either start datetime,
+        end datetime, title, url, description or flight code has changed too
 
         Args:
             current (pd.DataFrame, optional): live database. Defaults to None.
@@ -215,16 +310,28 @@ class Database():
         if current is None:
             current = self.get_live()
         stored = self.df
-        _joined = stored.join(current,lsuffix='_stored')
 
+        index = stored.index.intersection(current.index)
+        stored = stored.loc[index]
+        live = current.loc[index]
 
-        _filter = _joined.last_edit_stored != _joined.last_edit
-        _filter = _filter & ((_joined.title != _joined.title_stored) | (_joined.start_date != _joined.start_date_stored) | (_joined.end_date != _joined.end_date_stored))
-        _filter = _filter & (~ pd.isnull(_joined.last_edit)) & (~ pd.isnull(_joined.last_edit_stored))
+        stored_last_edit = self._column(stored, 'last_edit', pd.NaT)
+        live_last_edit = self._column(live, 'last_edit', pd.NaT)
 
-        
-        filtered_df = _joined[_filter]
-        index = list(filtered_df.index)
+        _filter = stored_last_edit != live_last_edit
+        _filter = _filter & (~ pd.isnull(stored_last_edit)) & (~ pd.isnull(live_last_edit))
+
+        changed = (
+            (self._text_column(stored, 'title') != self._text_column(live, 'title'))
+            | (self._column(stored, 'start_date', pd.NaT) != self._column(live, 'start_date', pd.NaT))
+            | (self._column(stored, 'end_date', pd.NaT) != self._column(live, 'end_date', pd.NaT))
+            | (self._text_column(stored, 'url') != self._text_column(live, 'url'))
+            | (self._text_column(stored, 'description') != self._text_column(live, 'description'))
+            | (self._text_column(stored, 'flight_code') != self._text_column(live, 'flight_code'))
+        )
+        _filter = _filter & changed
+
+        index = list(stored[_filter].index)
         logging.info(f"{len(index)} events have been modified on Notion")
         for id in index:
             logging.info(f"{id} has been modified on Notion")
