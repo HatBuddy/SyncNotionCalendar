@@ -182,6 +182,15 @@ class CardTests(unittest.TestCase):
         self.assertFalse(card.is_syncable)
         self.assertIsNone(card.start_date)
 
+    def test_card_with_an_empty_name_is_not_syncable(self):
+        # an empty title chunk gives "", an absent one gives None; both are unsyncable
+        self.assertFalse(Card(notion_page(title="")).is_syncable)
+
+        absent = notion_page()
+        absent["properties"]["Name"] = {"title": []}
+        self.assertFalse(Card(absent).is_syncable)
+        self.assertIsNone(Card(absent).title)
+
     def test_card_with_a_date_is_syncable(self):
         self.assertTrue(Card(notion_page()).is_syncable)
 
@@ -228,6 +237,21 @@ class NotionClientTests(unittest.TestCase):
         response = FakeResponse(
             {
                 "results": [notion_page(page_id="page-1"), dateless],
+                "has_more": False,
+                "next_cursor": None,
+            }
+        )
+
+        with patch("src.notionClient.requests.post", return_value=response):
+            cards = NotionClient("secret-token").get_live_cards("database-id")
+
+        self.assertEqual([card._id for card in cards], ["page-1"])
+
+    def test_get_live_cards_skips_untitled_cards(self):
+        untitled = notion_page(page_id="page-2", title="")
+        response = FakeResponse(
+            {
+                "results": [notion_page(page_id="page-1"), untitled],
                 "has_more": False,
                 "next_cursor": None,
             }

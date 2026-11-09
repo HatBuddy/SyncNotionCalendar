@@ -114,13 +114,14 @@ class Card:
     def is_syncable(self) -> bool:
         """Whether this card can become a Calendar event.
 
-        A card with no start date cannot be placed on a calendar, so it is
-        skipped rather than guessed at.
+        A card with no start date cannot be placed on a calendar, and one with
+        no title would become an event named "None", so both are skipped rather
+        than guessed at.
 
         Returns:
-            bool: True when the card has a start date
+            bool: True when the card has both a title and a start date
         """
-        return self.start_date is not None
+        return bool(self.title) and self.start_date is not None
 
     def to_dict(self) -> Dict:
         """Returns a representation of the card object as a Dict
@@ -230,7 +231,8 @@ class NotionClient:
                 logging.error(f"skipping Notion page {page.get('id')}: {e}")
                 continue
             if not card.is_syncable:
-                logging.warning(f"skipping Notion page {card._id} ('{card.title}'): no date set")
+                reason = 'no title' if not card.title else 'no date set'
+                logging.warning(f"skipping Notion page {card._id} ('{card.title}'): {reason}")
                 continue
             _list_card.append(card)
         return _list_card

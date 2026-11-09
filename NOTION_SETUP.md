@@ -35,11 +35,11 @@ The following properties **must exist with these exact names and types**. The na
 
 ### Name
 - Maps to the **event title** in Apple Calendar.
-- Events with an empty `Name` are **silently skipped** and not synced.
+- Rows with an empty `Name` are **skipped** and not synced; a warning naming the page id is written to the log.
 
 ### Date
 - Maps to the **start and end datetime** of the Calendar event.
-- Events with no date set will cause a sync error — every row must have a start date.
+- Rows with no date set are **skipped** with a warning; they do not fail the run, so a trip can be typed in before its dates are known.
 - **All-day events:** set a date with no time component in Notion. The sync tool detects these automatically and creates them as all-day events in Calendar.
 - **Timed events:** set a date and time in Notion (e.g. `Jan 15, 2025 2:30 PM`).
 - **Multi-day events:** enable "End date" in the Date property and set both a start and end date.
