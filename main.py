@@ -14,9 +14,12 @@ if __name__ == "__main__":
 
     log_files = glob(os.path.join(cwd, 'logs', '*.log'))
 
+    # Keep today's logs only. Comparing the whole date matters: comparing the
+    # day of the month alone kept every log written on the same day of an
+    # earlier month.
+    today = start_datetime.strftime('%Y-%m-%d')
     for f in log_files:
-        file_day = int(os.path.basename(f).split('T')[0].split('-')[-1])
-        if file_day != start_datetime.day:
+        if os.path.basename(f).split('T')[0] != today:
             os.remove(f)
 
     conf = ConfigParser()
